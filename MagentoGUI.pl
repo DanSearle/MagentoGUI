@@ -274,21 +274,31 @@ sub upload {
         }
 
         # Add the basic details of the product
-        $productData->{'name'} = $_->{Name};
-        $productData->{'short_description'} = $_->{Short_Description};
-        $productData->{'description'} = $_->{Description};
-        $productData->{'price'} = $_->{Price};
-        $productData->{'url_path'} = $_->{Url_Key} . ".html";
-        $productData->{'url_key'} = $_->{Url_Key};
-        $productData->{'status'} = 1;
-        $productData->{'weight'} = 0;
-        $productData->{'tax_class_id'} = 2;
-        $productData->{'websites'} = "base";
-        $productData->{'websites'} = [1];
-        my $productReq = ['simple', $_->{Attribute_Set_ID} , $_->{SKU}, $productData];
+#        $productData->{'name'} = $_->{Name};
+#        $productData->{'short_description'} = $_->{Short_Description};
+#        $productData->{'description'} = $_->{Description};
+#        $productData->{'price'} = $_->{Price};
+#        $productData->{'url_path'} = $_->{Url_Key} . ".html";
+#        $productData->{'url_key'} = $_->{Url_Key};
+#        $productData->{'status'} = 1;
+#        $productData->{'weight'} = 0;
+#        $productData->{'tax_class_id'} = 2;
+#        $productData->{'websites'} = [1];
+#        $productData->{'stock_data'} = { 'min_sale_qty'            => 1,
+#                                         'use_config_min_sale_qty' => 1,
+#                                         'use_config_max_sale_qty' => 1,
+#                                         'use_config_manage_stock' => 1
+#                                       };
+
+        print Dumper $_->{Attribute_Set_ID};
+        print Dumper $_->{SKU};
+        print Dumper $productData;
+
+        #my $productReq = ['simple', $_->{Attribute_Set_ID} , $_->{SKU}, $productData];
+        my $productReq = ['simple', $_->{Attribute_Set_ID}, $_->{SKU}, $productData];
 
         # Actually create the product
-        callAPI('catalog_product.create', $productReq);
+        callAPI('catalog_product.create', $productReq) or die("Product creation failed");
         
         #FIXME Needs testing
         foreach my $rel ($_->{Related}) {
