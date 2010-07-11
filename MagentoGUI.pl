@@ -86,7 +86,7 @@ sub logMessage {
 # Args:
 #      Array - Call arguments, without the sessionID
 sub callAPI {
-    die("Cannot call the API if we are not connected to the SOAP server") if (!$Server || !$SessionID);
+    die("Cannot call the API if we are not connected to the SOAP server") unless ($Server || $SessionID);
     my @args = ($SessionID, @_);
     return $Server->call(@args) or die("Could not execute API call!");
 }
@@ -95,6 +95,8 @@ sub callAPI {
 sub login {
     $Server    = SOAP::Lite
                     ->service($SOAPURL)
+                    ->use_prefix(1)
+                    ->envprefix('SOAP-ENV')
                     ->on_fault(\&SOAPon_fault) or die("Cannot connect to SOAP server");
 
     $SessionID = $Server->login($USER, $PASS)  or die("Failed to login to the SOAP server");
@@ -272,58 +274,58 @@ sub upload {
           # Set the attribute in the product data
           $productData->{$attr->{name}} = $attr->{value};
         }
+        #print Dumper $productData;
 
         # Add the basic details of the product
-#        $productData->{'name'} = $_->{Name};
-#        $productData->{'short_description'} = $_->{Short_Description};
-#        $productData->{'description'} = $_->{Description};
-#        $productData->{'price'} = $_->{Price};
-#        $productData->{'url_path'} = $_->{Url_Key} . ".html";
-#        $productData->{'url_key'} = $_->{Url_Key};
-#        $productData->{'status'} = 1;
-#        $productData->{'weight'} = 0;
-#        $productData->{'tax_class_id'} = 2;
-#        $productData->{'websites'} = [1];
+        $productData->{'name'} = $_->{Name};
+        $productData->{'short_description'} = $_->{Short_Description};
+        $productData->{'description'} = $_->{Description};
+        $productData->{'price'} = $_->{Price};
+        $productData->{'url_path'} = $_->{Url_Key} . ".html";
+        $productData->{'url_key'} = $_->{Url_Key};
+        $productData->{'status'} = 1;
+        $productData->{'weight'} = 0;
+        $productData->{'tax_class_id'} = 2;
+        $productData->{'websites'} = [1];
 #        $productData->{'stock_data'} = { 'min_sale_qty'            => 1,
 #                                         'use_config_min_sale_qty' => 1,
 #                                         'use_config_max_sale_qty' => 1,
 #                                         'use_config_manage_stock' => 1
 #                                       };
 
-        print Dumper $_->{Attribute_Set_ID};
-        print Dumper $_->{SKU};
-        print Dumper $productData;
 
         #my $productReq = ['simple', $_->{Attribute_Set_ID} , $_->{SKU}, $productData];
-        my $productReq = ['simple', $_->{Attribute_Set_ID}, $_->{SKU}, $productData];
+        my $productReq = ['simple', $_->{Attribute_Set_ID}, $_->{SKU}, SOAP::Data->type('map' => $productData)];
+        #print Dumper $productReq;
 
         # Actually create the product
         callAPI('catalog_product.create', $productReq) or die("Product creation failed");
         
+#        logMessage("Adding related products");
+#        foreach my $rel ($_->{Related}) {
+#          callAPI('product_link.assign', ['related', $_->{SKU}, $rel]);
+#        }
         #FIXME Needs testing
-        foreach my $rel ($_->{Related}) {
-          callAPI('product_link.assign', ['related', $_->{SKU}, $rel]);
-        }
-
-        # Upload the image if any
-        if($_->{Image} ne "") {
-          open(IMG, $_->{Image}) or die("Could not open image file!");
-          local($/) = undef; # slurp
-          my $base64content = MIME::Base64::encode(<IMG>);
-          close(IMG);
-          callAPI('product_media.create', [$_->{SKU}, {file => { 
-                                                       content => $base64content, 
-                                                       mime => "image/jpeg"}, 
-                                                     types => ["small_image", 
-                                                               "image", 
-                                                               "thumbnail"], 
-                                                     exclude => 0}]);
-        }
-  
-        # Add the product to a category
-        if($_->{Category} ne "") {
-          callAPI('category.assignProduct', [$_->{Category}, $_->{SKU}]);
-        }
+#
+#        # Upload the image if any
+#        if($_->{Image} ne "") {
+#          open(IMG, $_->{Image}) or die("Could not open image file!");
+#          local($/) = undef; # slurp
+#          my $base64content = MIME::Base64::encode(<IMG>);
+#          close(IMG);
+#          callAPI('product_media.create', [$_->{SKU}, {file => { 
+#                                                       content => $base64content, 
+#                                                       mime => "image/jpeg"}, 
+#                                                     types => ["small_image", 
+#                                                               "image", 
+#                                                               "thumbnail"], 
+#                                                     exclude => 0}]);
+#        }
+#  
+#        # Add the product to a category
+#        if($_->{Category} ne "") {
+#          callAPI('category.assignProduct', [$_->{Category}, $_->{SKU}]);
+#        }
 
         # Update the progress bar
         $progress++;
