@@ -13,7 +13,7 @@ use strict;
 use Data::Dumper;
 
 ## SOAP api library
-use SOAP::Lite +trace => 'debug';
+use SOAP::Lite ; #+trace => 'debug';
 
 ## TK GUI library
 use Tk; 
@@ -23,10 +23,16 @@ use Tk::ProgressBar;
 ## CSV Parser library
 use Text::CSV;
 
+## Base64 encoder library
+use MIME::Base64;
+
 ## Config
 my $SOAPURL = "http://dan.homelinux.net/magento-testing/magento/index.php/api/soap/?wsdl";
 my $USER    = "test";
 my $PASS    = "test123";
+#my $SOAPURL = "http://dan.homelinux.net/magento/index.php/api/soap/?wsdl";
+#my $USER    = 'mike';
+#my $PASS    = 't7x93kaMKR2THJjBswQUiVMizCTGEjEkeRcR75o8jmuuk0QAk79p7uDEXGgGPTVW';
 ## End Config
 
 ## Globals
@@ -39,7 +45,7 @@ my $UploadProgressBar;
 ## End Globals
 
 # Launch the GUI
-#startGUI();
+startGUI();
 
 # Start the interface
 sub startGUI {
@@ -95,7 +101,7 @@ sub callAPI {
 sub login {
     $Server    = SOAP::Lite
                     ->service($SOAPURL)
-                    ->use_prefix(1)
+                    #->use_prefix(1)
                     ->envprefix('SOAP-ENV')
                     ->on_fault(\&SOAPon_fault) or die("Cannot connect to SOAP server");
 
@@ -185,6 +191,9 @@ sub parseCSV {
 
 # Start the upload process
 sub upload {
+    # Clear progress bars
+    $CheckProgressBar->value(0);
+    $UploadProgressBar->value(0);
     # Login
     logMessage("Logging into Magento...");
     login();
@@ -210,21 +219,24 @@ sub upload {
     my $progress = 0;
     foreach(@csv) {
         # See if the product already exists
+        my $retattr;
         eval {
-            callAPI('product.info', [$_->{SKU}]);
+            $retattr = callAPI('product.info', [$_->{SKU}]);
         };
         chomp($@);
-        die("Product " . $_->{SKU} . " already exists!") if ($@ ne 'Product not exists.');
+        die("Product " . $_->{SKU} . " already exists!") unless (($@ eq 'Product not exists') or ($retattr->{'sku'} ne $_->{SKU}));
         
         # Check for non existent related products
         # TODO: Cache for speed
         if($_->{Related} > 0) {
             foreach my $relsku ($_->{Related}) {
+                my $relretattr; 
                 eval {
-                    callAPI('product.info', [$relsku]);
+                   $relretattr = callAPI('product.info', [$relsku]);
                 };
                 chomp($@);
-                die("Related product: " . $relsku . " for product " . $_->{SKU} . " does not exist!") if ($@ eq 'Product not exists.');
+                die("Related product: " . $$relsku[0] . " for product " . $_->{SKU} . " does not exist!") unless (($@ ne 'Product not exists.') or ($relretattr->{'sku'} eq $relsku));
+
 
                 $MainWindow->update();
             }
@@ -270,11 +282,17 @@ sub upload {
 
         # Add the attributes to the product data
         foreach my $attr (@{$_->{Attributes}}) {
-          die("Attribute " . $attr->{value} . " does not exist in the attribute set...") unless($_->{Attribute_Set_Name_ID}->{$attr->{name}});
-          # Set the attribute in the product data
-          $productData->{$attr->{name}} = $attr->{value};
+          die("Attribute " . $attr->{name} . " does not exist in the attribute set...") unless($_->{Attribute_Set_Name_ID}->{$attr->{name}});
+          # Get the attribute options
+          my @options = @{callAPI('product_attribute.options', [$attr->{name}])};
+
+          foreach my $option (@options) {
+            if ($option->{label} eq $attr->{value}) {
+              # Set the attribute in the product data
+              $productData->{$attr->{name}} = $option->{value};
+            }
+          }
         }
-        #print Dumper $productData;
 
         # Add the basic details of the product
         $productData->{'name'} = $_->{Name};
@@ -287,45 +305,51 @@ sub upload {
         $productData->{'weight'} = 0;
         $productData->{'tax_class_id'} = 2;
         $productData->{'websites'} = [1];
-#        $productData->{'stock_data'} = { 'min_sale_qty'            => 1,
-#                                         'use_config_min_sale_qty' => 1,
-#                                         'use_config_max_sale_qty' => 1,
-#                                         'use_config_manage_stock' => 1
-#                                       };
+        $productData->{'stock_data'} = SOAP::Data->type('map' => { 
+                                         'min_sale_qty'            => 1,
+                                         'use_config_min_sale_qty' => 1,
+                                         'use_config_max_sale_qty' => 1,
+                                         'use_config_manage_stock' => 1
+                                       });
 
 
         #my $productReq = ['simple', $_->{Attribute_Set_ID} , $_->{SKU}, $productData];
         my $productReq = ['simple', $_->{Attribute_Set_ID}, $_->{SKU}, SOAP::Data->type('map' => $productData)];
-        #print Dumper $productReq;
 
         # Actually create the product
         callAPI('catalog_product.create', $productReq) or die("Product creation failed");
         
-#        logMessage("Adding related products");
-#        foreach my $rel ($_->{Related}) {
-#          callAPI('product_link.assign', ['related', $_->{SKU}, $rel]);
-#        }
+        logMessage("Adding related products");
+        if(@{$_->{Related}}) {
+          foreach my $rel (@{$_->{Related}}) {
+            callAPI('product_link.assign', ['related', $_->{SKU}, $rel]);
+          }
+        }
         #FIXME Needs testing
-#
-#        # Upload the image if any
-#        if($_->{Image} ne "") {
-#          open(IMG, $_->{Image}) or die("Could not open image file!");
-#          local($/) = undef; # slurp
-#          my $base64content = MIME::Base64::encode(<IMG>);
-#          close(IMG);
-#          callAPI('product_media.create', [$_->{SKU}, {file => { 
-#                                                       content => $base64content, 
-#                                                       mime => "image/jpeg"}, 
-#                                                     types => ["small_image", 
-#                                                               "image", 
-#                                                               "thumbnail"], 
-#                                                     exclude => 0}]);
-#        }
-#  
-#        # Add the product to a category
-#        if($_->{Category} ne "") {
-#          callAPI('category.assignProduct', [$_->{Category}, $_->{SKU}]);
-#        }
+
+        # Upload the image if any
+        if($_->{Image} ne "") {
+          open(IMG, $_->{Image}) or die("Could not open image file!");
+          local($/) = undef; # slurp
+          my $base64content = MIME::Base64::encode(<IMG>);
+          close(IMG);
+          callAPI('product_media.create', [$_->{SKU}, SOAP::Data->type( "map" => {
+                                                       file => SOAP::Data->type("map" => { 
+                                                         content => $base64content, 
+                                                         mime => "image/jpeg"
+                                                       }), 
+                                                       types => ["small_image", 
+                                                                 "image", 
+                                                                 "thumbnail"], 
+                                                       exclude => 0
+                                                     })]);
+        }
+  
+        # Add the product to a category
+        logMessage("Adding the product to its category");
+        if($_->{Cat_ID} ne "") {
+          callAPI('category.assignProduct', [$_->{Cat_ID}, $_->{SKU}]);
+        }
 
         # Update the progress bar
         $progress++;
@@ -340,5 +364,5 @@ sub upload {
 
 # TESTING
 #login();
-$Filename = "/home/dan/Dropbox/Programming/MagentoGUI/testing.csv";
-startGUI();
+#$Filename = "/home/dan/Dropbox/Programming/MagentoGUI/testing.csv";
+#startGUI();
