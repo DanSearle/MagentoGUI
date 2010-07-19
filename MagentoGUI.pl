@@ -27,12 +27,12 @@ use Text::CSV;
 use MIME::Base64;
 
 ## Config
-#my $SOAPURL = "http://dan.homelinux.net/magento-testing/magento/index.php/api/soap/?wsdl";
-#my $USER    = "test";
-#my $PASS    = "test123";
-my $SOAPURL = "http://dan.homelinux.net/magento/index.php/api/soap/?wsdl";
-my $USER    = 'mike';
-my $PASS    = 't7x93kaMKR2THJjBswQUiVMizCTGEjEkeRcR75o8jmuuk0QAk79p7uDEXGgGPTVW';
+## Change the SOAP url below to point to your website
+my $SOAPURL = "http://my-website.com/magento/index.php/api/soap/?wsdl";
+## Change the user to the API username
+my $USER    = "test";
+## Change the password to the API users password
+my $PASS    = "test123";
 ## End Config
 
 ## Globals
