@@ -53,22 +53,22 @@ sub startGUI {
     $MainWindow->geometry('600x300+0+0');
 
     # Create the browse file frame
-    my $filefrm = $MainWindow->Frame()->pack();
+    my $filefrm = $MainWindow->Frame()->pack(-fill => "x", -expand => 1);
     # Add the label, textbox and browse button
-    $filefrm->Label (-text         => 'Filename:'    )->pack(-side => 'left' );
+    $filefrm->Label (-text         => 'Filename:'    )->pack(-side => 'left');
     $filefrm->Button(-text         => 'Browse...', 
                      -command      => \&browseFileGUI)->pack(-side => 'right');
-    $filefrm->Entry (-textvariable => \$Filename     )->pack(-side => 'right');
+    $filefrm->Entry (-textvariable => \$Filename     )->pack(-side => 'right', -fill => "x", -expand => 1);
 
     # Create the upload button
     $MainWindow->Button(-text => 'Upload', -command => \&upload)->pack();
 
     # Create a progress bars
-    $CheckProgressBar  = $MainWindow->ProgressBar(-length => 600, -foreground => 'red')->pack();
-    $UploadProgressBar = $MainWindow->ProgressBar(-length => 600, -foreground => 'green')->pack();
+    $CheckProgressBar  = $MainWindow->ProgressBar(-foreground => 'red')->pack(-fill => "x", -expand => 1);
+    $UploadProgressBar = $MainWindow->ProgressBar(-foreground => 'green')->pack(-fill => "x", -expand => 1);
 
     # Create the scrolling logging window
-    my $txt = $MainWindow->Text(-width=>85, -height=>17)->pack();
+    my $txt = $MainWindow->Text()->pack(-fill => "both", -expand => 1);
     tie *STDOUT, ref $txt, $txt;
     tie *STDERR, ref $txt, $txt;
 
@@ -179,6 +179,7 @@ sub parseCSV {
 
 # Start the upload process
 sub upload {
+    die("No filename provided, cannot do anything.") unless ($Filename);
     # Clear progress bars
     $CheckProgressBar->value(0);
     $UploadProgressBar->value(0);
