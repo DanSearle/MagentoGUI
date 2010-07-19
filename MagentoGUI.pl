@@ -133,58 +133,46 @@ sub parseCSV {
   my $currline = "";
 
   # Open the file
-  open CSV, $filename or (logMessage("$!") and return);
+  open my $CSVFile, $filename or (logMessage("$!") and return);
 
   # Create a csv object
-  my $csv = Text::CSV->new();
+  my $csv = Text::CSV->new({binary => 1, eol => $/ });
 
   # Read the file line by line
-  while(<CSV>) {
+  while(my $values = $csv->getline($CSVFile)) {
     next unless ($. > 1); # Skip the first line
-    $currline .= $_;      # Append to the current line
 
-    # If the line has not ended add a html newline
-    # and finish parsing the record, by moving to the
-    # next line
-    ($currline =~ s/\n$/<br\/>/g and next) if (! ($currline =~ /"$/ || $currline =~ /[0-9]$/));
-  
-    # Parse the line and print a error message and return if it fails.
-    # (logMessage("Failed to parse line: " . $csv->error_input ) and return -1) if !(;
-    if (! ($csv->parse($currline))) {
-      logMessage("Failed to parse line: " . $csv->error_input . "\n" . "Message: " . Dumper($csv->error_diag));
-      return -1;
-    }
-
-    # Blank the parsed line for a new run
-    $currline = "";
+    # Replace newlines with html line breaks
+    $values->[2] =~ s/\n/<br\/>/g;
+    $values->[3] =~ s/\n/<br\/>/g;
 
     # Get the values
-    my @values = $csv->fields();
     my $data = {
-                  SKU               => $values[0],
-                  Name              => $values[1],
-                  Short_Description => $values[2],
-                  Description       => $values[3],
-                  Price             => $values[4],
-                  Attribute_Set     => $values[5],
+                  SKU               => $values->[0],
+                  Name              => $values->[1],
+                  Short_Description => $values->[2],
+                  Description       => $values->[3],
+                  Price             => $values->[4],
+                  Attribute_Set     => $values->[5],
                   Attributes        => 
                   [map {my @s = split(/:/, $_);
                                            my $name = $s[0];
                                            my $val  = $s[1];
                                            { 'name' => $name, 'value' => $val }
-                                          } split (/;/, $values[6])],
-                  Image             => $values[7],
-                  Url_Key           => $values[8],
-                  Related           => [split(/;/, $values[9])],
-                  Cat_ID            => $values[10]
+                                          } split (/;/, $values->[6])],
+                  Image             => $values->[7],
+                  Url_Key           => $values->[8],
+                  Related           => [split(/;/, $values->[9])],
+                  Cat_ID            => $values->[10]
               };
 
     # Add the data to the list of records
     push (@records, $data);
   }
+  $csv->eof or (logMessage("Failed to parse line: " . $csv->error_input . "\n" . "Message: " . Dumper($csv->error_diag())) and return -1);
 
   # Close the file
-  close CSV;
+  close $CSVFile;
 
   return @records;
 }
