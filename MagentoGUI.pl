@@ -27,12 +27,12 @@ use Text::CSV;
 use MIME::Base64;
 
 ## Config
-my $SOAPURL = "http://dan.homelinux.net/magento-testing/magento/index.php/api/soap/?wsdl";
-my $USER    = "test";
-my $PASS    = "test123";
-#my $SOAPURL = "http://dan.homelinux.net/magento/index.php/api/soap/?wsdl";
-#my $USER    = 'mike';
-#my $PASS    = 't7x93kaMKR2THJjBswQUiVMizCTGEjEkeRcR75o8jmuuk0QAk79p7uDEXGgGPTVW';
+#my $SOAPURL = "http://dan.homelinux.net/magento-testing/magento/index.php/api/soap/?wsdl";
+#my $USER    = "test";
+#my $PASS    = "test123";
+my $SOAPURL = "http://dan.homelinux.net/magento/index.php/api/soap/?wsdl";
+my $USER    = 'mike';
+my $PASS    = 't7x93kaMKR2THJjBswQUiVMizCTGEjEkeRcR75o8jmuuk0QAk79p7uDEXGgGPTVW';
 ## End Config
 
 ## Globals
@@ -133,46 +133,59 @@ sub parseCSV {
   my $currline = "";
 
   # Open the file
-  open my $CSVFile, $filename or (logMessage("$!") and return);
+  open CSV, $filename or (logMessage("$!") and return);
 
   # Create a csv object
-  my $csv = Text::CSV->new({binary => 1, eol => $/ });
+  my $csv = Text::CSV->new();
 
   # Read the file line by line
-  while(my $values = $csv->getline($CSVFile)) {
+  while(<CSV>) {
     next unless ($. > 1); # Skip the first line
+    $currline .= $_;      # Append to the current line
 
-    # Replace newlines with html line breaks
-    $values->[2] =~ s/\n/<br\/>/g;
-    $values->[3] =~ s/\n/<br\/>/g;
+    # If the line has not ended add a html newline
+    # and finish parsing the record, by moving to the
+    # next line
+    ($currline =~ s/\n$/<br\/>/g and next) if (! ($currline =~ /"$/ || $currline =~ /[0-9]$/));
+  
+    # Parse the line and print a error message and return if it fails.
+    # (logMessage("Failed to parse line: " . $csv->error_input ) and return -1) if !(;
+    if (! ($csv->parse($currline))) {
+      print Dumper($currline);
+      logMessage("Failed to parse line: " . $csv->error_input . "\n" . "Message: " . Dumper($csv->error_diag));
+      return -1;
+    }
+
+    # Blank the parsed line for a new run
+    $currline = "";
 
     # Get the values
+    my @values = $csv->fields();
     my $data = {
-                  SKU               => $values->[0],
-                  Name              => $values->[1],
-                  Short_Description => $values->[2],
-                  Description       => $values->[3],
-                  Price             => $values->[4],
-                  Attribute_Set     => $values->[5],
+                  SKU               => $values[0],
+                  Name              => $values[1],
+                  Short_Description => $values[2],
+                  Description       => $values[3],
+                  Price             => $values[4],
+                  Attribute_Set     => $values[5],
                   Attributes        => 
                   [map {my @s = split(/:/, $_);
                                            my $name = $s[0];
                                            my $val  = $s[1];
                                            { 'name' => $name, 'value' => $val }
-                                          } split (/;/, $values->[6])],
-                  Image             => $values->[7],
-                  Url_Key           => $values->[8],
-                  Related           => [split(/;/, $values->[9])],
-                  Cat_ID            => $values->[10]
+                                          } split (/;/, $values[6])],
+                  Image             => $values[7],
+                  Url_Key           => $values[8],
+                  Related           => [split(/;/, $values[9])],
+                  Cat_ID            => $values[10]
               };
 
     # Add the data to the list of records
     push (@records, $data);
   }
-  $csv->eof or (logMessage("Failed to parse line: " . $csv->error_input . "\n" . "Message: " . Dumper($csv->error_diag())) and return -1);
 
   # Close the file
-  close $CSVFile;
+  close CSV;
 
   return @records;
 }
@@ -207,7 +220,7 @@ sub upload {
     my $progress = 0;
     foreach(@csv) {
         # See if the product already exists
-        my $retattr;
+	my $retattr;
         eval {
             $retattr = callAPI('product.info', [$_->{SKU}]);
         };
@@ -218,14 +231,12 @@ sub upload {
         # TODO: Cache for speed
         if($_->{Related} > 0) {
             foreach my $relsku ($_->{Related}) {
-                my $relretattr; 
+		my $relretattr;
                 eval {
-                   $relretattr = callAPI('product.info', [$relsku]);
+                    $relretattr = callAPI('product.info', [$relsku]);
                 };
                 chomp($@);
                 die("Related product: " . $$relsku[0] . " for product " . $_->{SKU} . " does not exist!") unless (($@ ne 'Product not exists.') or ($relretattr->{'sku'} eq $relsku));
-
-
                 $MainWindow->update();
             }
         }
@@ -280,6 +291,7 @@ sub upload {
               $productData->{$attr->{name}} = $option->{value};
             }
           }
+
         }
 
         # Add the basic details of the product
